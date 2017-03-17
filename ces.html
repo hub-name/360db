@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html>
+
+	<head>
+		<meta charset="UTF-8">
+		<title></title>
+	</head>
+
+	<body>
+		<script src="js/jquery.js" type="text/javascript" charset="utf-8"></script>
+		<script type="text/javascript">
+			networkMap();
+
+			function networkMap() {
+				$.ajax({
+					type: "post",
+					url: 'http://192.168.234.133:9200/skyeye-las_event-2017.03.09/_search',
+					async: true,
+					data: JSON.stringify({
+						"aggs": {
+					"siteData": {
+						"terms": {
+							"field": "pri"
+						}
+					}
+				}
+					}),
+					dataType: "json",
+					success: function(result) {
+						console.log(result);
+					}
+				});
+			}
+		</script>
+	</body>
+
+</html>

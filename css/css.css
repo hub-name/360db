@@ -1,0 +1,298 @@
+body {
+	width: 100%;
+	height: auto;
+	background: url(../img/bodybg.png) no-repeat center top #020005;
+	font-family: "microsoft yahei";
+	font-size: 16px;
+	background-size: 100% 100%;
+}
+
+.main {
+	width: auto;
+	height: 1080px;
+	margin: 0px 15px;
+	position: relative;
+	overflow: hidden;
+}
+
+.hd-logo {
+	width: 430px;
+	height: 65px;
+}
+
+.hd-logo img {
+	width: 100%;
+	height: auto;
+}
+
+.hd-title {
+	width: 1030px;
+	height: 65px;
+}
+.gc-alrn{
+	text-align: center;
+	margin-top: 30px;
+}
+.gc-alrn li{
+	display: inline-block;
+	font-size: 18px;
+	color: #FFFFFF;
+	height: 50px;
+	line-height: 50px;
+	padding: 0 1em;
+}
+.gc-alrn li.gca-all{
+	color: #3ba54d;
+}
+.gc-alrn li.gca-high{
+	color: #ff0000;
+}
+.gc-alrn li.gca-middle{
+	color: #ff8401;
+}
+.gc-alrn li.gca-low{
+	color: #fde201;
+}
+.hd-data {
+	width: 430px;
+	height: 65px;
+	color: #FFFFFF;
+	line-height: 65px;
+	text-align: center;
+	font-size: 22px;
+	background: url(../img/time.png) no-repeat center top;
+}
+
+.hd-data span {
+	font-weight: bold;
+	background-image: -webkit-gradient(linear, left top, left bottom, color-stop(0.40, #ffe516), color-stop(0.57, #ffe516), color-stop(0.8, #25762c));
+	-webkit-background-clip: text;
+	-webkit-text-fill-color: transparent;
+}
+
+.m-lbox {
+	width: 430px;
+	height: 250px;
+	border-bottom: solid 1px #184471;
+	color: #FFFFFF;
+}
+
+.lb-head {
+	height: 430px;
+	height: 70px;
+	color: #FFFFFF;
+}
+
+.lbh-msg-name {
+	font-size: 18px;
+	height: 40px;
+	line-height: 40px;
+}
+
+.lbh-msg-url {
+	color: #6db2ff;
+	font-size: 14px;
+	height: 20px;
+	line-height: 20px;
+}
+
+.lbh-msg {}
+
+.lb-center {
+	width: 430px;
+	height: 180px;
+}
+
+.lbc-data {
+	width: 100px;
+	float: left;
+	height: 180px;
+	text-align: center;
+}
+
+.lbc-data h5 {
+	font-size: 18px;
+	line-height: 200%;
+	font-weight: normal;
+}
+
+.anum {
+	color: #6db2ff;
+	font-size: 32px;
+	line-height: 180%;
+	font-weight: bold;
+}
+
+.aqs {
+	font: 200%;
+}
+
+.abfb {
+	font-size: 24px;
+	color: #6db2ff;
+	line-height: 180%;
+	font-weight: bold;
+}
+
+.lbc-chart {
+	width: 310px;
+	height: 180px;
+	float: left;
+}
+
+.m-rbox {
+	width: 430px;
+	height: 506px;
+	border-bottom: solid 1px #184471;
+}
+
+.m-rbox h3 {
+	color: #FFFFFF;
+	font-size: 18px;
+	height: 40px;
+	line-height: 40px;
+	text-align: center;
+	font-weight: normal;
+	padding-top: 20px;
+}
+
+.m-rbox li {
+	color: #4f98ff;
+	height: 40px;
+	line-height: 40px;
+}
+
+.m-rbox li:nth-child(odd) {
+	background: rgba(48, 60, 98, 0.15);
+}
+
+.m-rbox .m-web li .mw-url,
+.m-rbox .m-web li .mw-num {
+	width: 340px;
+	height: 40px;
+	line-height: 40px;
+	display: block;
+	float: left;
+	text-align: center;
+	font-size: 14px;
+}
+
+.m-rbox .m-web li .mw-num {
+	width: 90px;
+}
+
+.m-rbox .m-atkList li .mal-time,
+.m-rbox .m-atkList li .mal-aim,
+.m-rbox .m-atkList li .mal-type,
+.m-rbox .m-atkList li .mal-source {
+	width: 105px;
+	text-align: center;
+	display: block;
+	float: left;
+	height: 40px;
+	line-height: 40px;
+	font-size: 14px;
+}
+
+.g-earth {
+	width: 100%;
+	height: 935px;
+}
+
+.g-earth #mapEarth {
+	width: 100%;
+	height: 100%;
+}
+
+@media screen and (max-width:1440px) {
+	.main {
+		height: 760px;
+		overflow: hidden;
+		margin: 0 5px;
+	}
+	.hd-logo {
+		width: 300px;
+		height: 50px;
+	}
+	.m-lbox {
+		width: 300px;
+		height: 173px;
+	}
+	.lb-center {
+		width: 300px;
+		height: 120px;
+		overflow: hidden;
+	}
+	.lbc-data {
+		width: 50px;
+		height: 120px;
+	}
+	.lbc-chart {
+		width: 250px;
+		height: 120px;
+	}
+	.lbc-data h5 {
+		font-size: 16px;
+	}
+	.anum {
+		font-size: 24px;
+		line-height: 150%;
+	}
+	.abfb {
+		font-size: 18px;
+		line-height: 120%;
+	}
+	.lbh-msg-name {
+		height: 30px;
+		line-height: 30px;
+		font-size: 18px;
+	}
+	.lb-head {
+		height: 48px;
+	}
+	.m-rbox {
+		width: 300px;
+		height: 346px;
+	}
+	.hd-data {
+		width: 300px;
+		font-size: 18px;
+		line-height: 50px;
+		height: 50px;
+		overflow: hidden;
+	}
+	.hd-data span {
+		line-height: 50px;
+		height: 50px;
+		display: block;
+	}
+	.m-rbox h3 {
+		font-size: 18px;
+		line-height: 30px;
+		height: 30px;
+		padding-top: 5px;
+	}
+	.m-rbox li {
+		height: 30px;
+		line-height: 30px;
+	}
+	.m-rbox .m-web li .mw-url,
+	.m-rbox .m-web li .mw-num {
+		width: 220px;
+		line-height: 30px;
+		height: 30px;
+		font-size: 14px;
+	}
+	.m-rbox .m-web li .mw-num {
+		width: 80px;
+	}
+	.m-rbox .m-atkList li .mal-time,
+	.m-rbox .m-atkList li .mal-aim,
+	.m-rbox .m-atkList li .mal-type,
+	.m-rbox .m-atkList li .mal-source {
+		width: 75px;
+		font-size: 14px;
+		height: 30px;
+		line-height: 30px;
+	}
+}

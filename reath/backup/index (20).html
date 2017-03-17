@@ -1,0 +1,930 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>RuanTong-earth</title>
+
+    <style>
+        html, body{ margin:0; height:100%; }
+
+        #mapEarth {
+            border: none;
+            cursor: pointer;
+            width: 100%;
+            height:100%;
+            background-color: #0094ff;
+        }
+    </style>
+
+    <script src="js/three.js"></script>
+    <script src="js/loaders/MTLLoader.js"></script>
+    <script src="js/loaders/OBJLoader.js"></script>
+    <script src="js/controls/OrbitControls.js"></script>
+    <script src="js/Tween.js"></script>
+
+    <script id="vertexShader" type="x-shader/x-vertex">
+        uniform vec3 viewVector;
+        uniform float c;
+        uniform float p;
+        varying float intensity;
+        void main()
+        {
+        vec3 vNormal = normalize( normalMatrix * normal );
+        vec3 vView = normalize( normalMatrix * viewVector );
+        intensity = pow( c - dot(vNormal, vView), p );
+
+        gl_Position = projectionMatrix * modelViewMatrix * vec4( position, 1.0 );
+        }
+    </script>
+
+    <script id="fragmentShader" type="x-shader/x-vertex">
+        uniform vec3 glowColor;
+        varying float intensity;
+        void main()
+        {
+        vec3 glow = glowColor * intensity;
+        gl_FragColor = vec4( glow, 1.0 );
+        }
+    </script>
+
+    <script>
+        //全局参数
+        var radius = 100;
+        var cubeScaleFactor = 0.33;
+        var cloudCubeYellowAlarmValue = 50; //百分比
+        var cloudCubeRedAlarmValue = 70;    //百分比
+        var cameraDefalutPos = new THREE.Vector3(0, 0, 500);
+        //var cameraDefalutPos = new THREE.Vector3(353, 215, -113);
+
+        var circleSegmentCount = 64;
+        var circleMiddelLength = 5;
+        var circleTurboFactor = 8;
+        var lineWidth = 2;
+        var circleScaleFactor = 0.5;
+
+        var lineMatGreen = new THREE.LineBasicMaterial({ color: 0x00FF00, linewidth: lineWidth });
+        var lineMatRed = new THREE.LineBasicMaterial({ color: 0xff0000, linewidth: lineWidth });
+
+        var container, scene, camera, renderer;
+        var controls;
+        var isResetCamPos = false;
+
+        var earthObj;
+        var cityLocationObjs = [];
+        var citySelectorObjs = [];
+        var cityNameObjs = [];
+        var cloudCubes = [];
+        var selectorMatAlarm;
+        var selectorMatOrigin;
+        var allCircleLines = [];
+        var allCircleLinesDic = [];
+        var earthFallOff;
+        var cityLinePlaneObjs = [];
+
+        var backlightObj = null;
+        var selectorIns = null;
+        var locationIns = null;
+
+        var zeroVec3 = new THREE.Vector3(0, 0, 0);
+
+        //云资源变量测试参数
+        var cloudResourceTestArgs = { "beijing": 52, "liaoyuan": 16, "kunshan": 75, "meishan": 9, "shenzhen": 4, "wuhan": 8, "wuxi": 7, "xiangyang": 21, "xinxian": 6, "yantai": 7, "SanFrancisco": 55 }
+
+        //辽源、北京、烟台、襄阳、新县、武汉、无锡、昆山、眉山、深圳
+        var cityNameTextureWidth = 128;
+        var cityNameTextureHeight = 64;
+
+        function init() {
+            container = document.getElementById("mapEarth");
+            scene = new THREE.Scene();
+            camera = new THREE.PerspectiveCamera(30, container.clientWidth/container.clientHeight, 0.1, 2000);
+            //camera = new THREE.OrthographicCamera(container.clientWidth / -2, container.clientWidth / 2, container.clientHeight / 2, container.clientHeight / -2, -500, 1000);
+            renderer = new THREE.WebGLRenderer();
+            renderer.setPixelRatio(window.devicePixelRatio);
+            renderer.setSize(container.clientWidth, container.clientHeight);
+            container.appendChild(renderer.domElement);
+
+            var axies = new THREE.AxisHelper(200);
+            scene.add(axies);
+
+            camera.position.z = 500;
+
+            controls = new THREE.OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.enableZoom = true;
+            //controls.minDistance = 180;
+            controls.minDistance = 0;
+            controls.maxDistance = 600;
+
+            //add Light
+            var ambientLight = new THREE.AmbientLight(0xffffff, 0.8);
+            scene.add(ambientLight);
+
+            var dirLight = new THREE.DirectionalLight(0xfffde1, 1);
+            dirLight.position.set(120, 120, 100);
+            scene.add(dirLight);
+
+            loadScene();
+
+            render();
+        }
+
+        function loadScene() {
+            var mtlLoader = new THREE.MTLLoader();
+            mtlLoader.setPath("models/");
+            mtlLoader.load("earth.mtl", function (materials) {
+                materials.preload();
+
+                var objLoader = new THREE.OBJLoader();
+                objLoader.setMaterials(materials);
+
+                objLoader.setPath("models/");
+                objLoader.load("earth.obj", function (objects) {
+                    scene.add(objects);
+
+                    objects.name = "EarthObjs";
+
+                    objects.traverse(function (child) {
+                        if (child instanceof THREE.Mesh) {
+
+                            if (child.name == "Earth") {
+                                earthObj = child;
+                                //child.visible = false;
+                            }
+
+                            if (child.name == "EarthBackLight") {
+                                var matNew = new THREE.MeshBasicMaterial({ map: child.material.map, transparent: true, opacity: 1 });
+                                child.material = matNew;
+                                backlightObj = child;
+                                //child.visible = false;
+                            }
+
+                            if (child.name == "Selector") {
+                                //var matNew = new THREE.MeshBasicMaterial({ map: child.material.map, transparent: true, opacity: 1, side: THREE.DoubleSide, depthWrite: false, depthTest: false });
+                                var matNew = new THREE.MeshBasicMaterial({ map: child.material.map, transparent: true, opacity: 1, side: THREE.DoubleSide, depthWrite: false });
+                                child.material = matNew;
+                                selectorIns = child;
+
+                                selectorMatAlarm = new THREE.MeshBasicMaterial({ map: child.material.map, transparent: true, opacity: 1, side: THREE.DoubleSide, depthWrite: false });
+                                selectorMatOrigin = matNew;
+
+                                child.visible = false;
+                            }
+
+                            if (child.name == "Location") {
+                                locationIns = child;
+                                
+                                var matLocation = new THREE.MeshPhongMaterial({ color: 0xffff00, emissive: 0xffff00, side: THREE.DoubleSide });
+                                child.material = matLocation;
+                            }
+                        }
+                    })
+
+                    camera.position.set(cameraDefalutPos.x, cameraDefalutPos.y, cameraDefalutPos.z);
+                    camera.lookAt(zeroVec3);
+
+                    createCitys();
+
+                    createAirEffect();
+                })
+            })
+        }
+
+        function createAirEffect() {
+
+            var fallOffMaterial = new THREE.ShaderMaterial(
+            {
+                uniforms:
+                {
+                    "c": { type: "f", value: 0.9 },
+                    "p": { type: "f", value: 1.6 },
+                    glowColor: { type: "c", value: new THREE.Color(0x89b3ff) },
+                    viewVector: { type: "v3", value: camera.position }
+                },
+                vertexShader: document.getElementById('vertexShader').textContent,
+                fragmentShader: document.getElementById('fragmentShader').textContent,
+                side: THREE.FrontSide,
+                blending: THREE.AdditiveBlending,
+                transparent: true
+            });
+
+            var sphereGeom = new THREE.SphereGeometry(100, 40, 40);
+            earthFallOff = new THREE.Mesh(sphereGeom.clone(), fallOffMaterial.clone());
+            earthFallOff.position = earthObj.position;
+            earthFallOff.scale.multiplyScalar(1.0055);
+            scene.add(earthFallOff);
+        }
+
+        function createCitys() {
+            positionFromLatitudeAndLongitude("辽源", "liaoyuan", 42.894, 125.150);
+            positionFromLatitudeAndLongitude("北京", "beijing", 39.911, 116.4);
+            positionFromLatitudeAndLongitude("烟台", "yantai", 37.469, 121.454);
+            positionFromLatitudeAndLongitude("襄阳", "xiangyang", 32.014, 112.129);
+            positionFromLatitudeAndLongitude("新县", "xinxian", 31.6497, 114.885);
+            positionFromLatitudeAndLongitude("武汉", "wuhan", 30.598, 114.3118);
+            positionFromLatitudeAndLongitude("无锡", "wuxi", 31.4967, 120.3189);
+            positionFromLatitudeAndLongitude("昆山", "kunshan", 31.39, 120.988);
+            positionFromLatitudeAndLongitude("眉山", "meishan", 30.081, 103.855);
+            positionFromLatitudeAndLongitude("深圳", "shenzhen", 22.548, 114.066);
+            positionFromLatitudeAndLongitude("旧金山", "SanFrancisco", 37.46, -122.26);
+
+            positionFromLatitudeAndLongitude("测试1", "cs1", 30, 30);
+            positionFromLatitudeAndLongitude("测试2", "cs2", 40, 60);
+
+            //for (var i = -9; i <= 9; i++) {
+            //    positionFromLatitudeAndLongitude(i * 10, 116.4);
+            //}
+        }
+
+        //根据经纬度创建城市的Location、Selector、城市名称。（latitude 纬度、longitude 经度）
+        function positionFromLatitudeAndLongitude(cityChineseName, cityEnglishName, latitude, longitude) {
+
+            var x = Math.sin(longitude * Math.PI / 180) * Math.cos(latitude * Math.PI / 180);
+            var z = Math.cos(longitude * Math.PI / 180) * Math.cos(latitude * Math.PI / 180);
+
+            var y = Math.sin(latitude * Math.PI / 180);
+
+            //console.log(x, y, z);
+            if (longitude > 0 && longitude < 180) { x = Math.abs(x); }
+            if (longitude >= -180 && longitude <= 0) { x = -Math.abs(x); }
+
+            if (longitude > -90 && longitude < 90) { z = Math.abs(z); }
+            if (longitude > -180 && longitude <= -90 || longitude >= 90 && longitude <= 180) { z = -Math.abs(z);}
+            //console.log(x, y, z);
+
+            //生成当前城市的Location
+            var cityLoction = locationIns.clone();
+            cityLoction.position.set(x * radius, y * radius, z * radius);
+            cityLoction.lookAt(new THREE.Vector3(0, 0, 0));
+            cityLoction.rotateX(-Math.PI / 2);
+            scene.add(cityLoction);
+            cityLoction.visible = true;
+            cityLoction.name = "Location_" + cityEnglishName;
+            cityLocationObjs.push(cityLoction);
+
+            //生成当前城市的Selector
+            var citySelector = selectorIns.clone();
+            citySelector.position.set(x * radius, y * radius, z * radius);
+            citySelector.lookAt(new THREE.Vector3(0, 0, 0));
+            citySelector.rotateX(-Math.PI / 2);
+            citySelector.translateY(0.8);
+            scene.add(citySelector);
+            citySelector.visible = true;
+            citySelector.name = "Selector_" + cityEnglishName;
+            citySelectorObjs.push(citySelector);
+
+
+            //创建当前城市的名称
+            var namePlaneObj = createCanvas(cityChineseName, cityEnglishName, x * radius, y * radius, z * radius);
+            cityNameObjs.push(namePlaneObj);
+        }
+
+        //创建当前城市的名称面片Mesh，并贴图
+        function createCanvas(cityChineseName, cityEnglishName, x, y, z) {
+            var canvas = document.createElement('canvas');
+            context = canvas.getContext('2d');
+
+            canvas.width = cityNameTextureWidth;
+            canvas.height = cityNameTextureHeight;
+
+            context.font = '25pt 微软雅黑';
+            context.fillStyle = 'red';
+            context.textAlign = "center";
+            context.textBaseline = "middle";
+            context.fillText(cityChineseName, canvas.width / 2, canvas.height / 2);
+
+            var canvasTexture = new THREE.CanvasTexture(canvas);
+            var material = new THREE.MeshBasicMaterial({ map: canvasTexture, transparent: true, depthWrite: false });
+            var plane = new THREE.PlaneGeometry(8, 4);
+            var namePlaneObj = new THREE.Mesh(plane, material);
+            namePlaneObj.position.set(x, y, z);
+            namePlaneObj.lookAt(new THREE.Vector3(0, 0, 0));
+            namePlaneObj.rotateY(Math.PI);
+            namePlaneObj.translateY(-3);
+            namePlaneObj.translateZ(1);
+            namePlaneObj.name = "CityName_" + cityEnglishName;
+            scene.add(namePlaneObj);
+            
+            return namePlaneObj;
+        }
+
+        //生成云资源柱 0-50% 绿色，50%-70%黄色，大于70%红色
+        function generateCubeColumn(cloudResource) {
+
+            //showAllNameMesh();
+            //hideAllLinkLine();
+            //stopAllSecurityIncidents();
+
+            destoryCloudCube();
+
+            for (var i = 0; i < cloudCityLocationObjs.length; i++) {
+
+                var lacationObj = cloudCityLocationObjs[i];
+
+                var cubeOriginlen = cloudResource[lacationObj.name.split("_")[1]];
+
+                var boxGeo = new THREE.BoxGeometry(1.2, 1.2, 1.2);
+                var matBox = new THREE.MeshBasicMaterial({ color: 0x00ff00 });
+                var cloudCubeMesh = new THREE.Mesh(boxGeo, matBox);
+
+                cloudCubeMesh.name = "cloudCube_" + lacationObj.name.split("_")[1];
+                cloudCubes.push(cloudCubeMesh);
+
+                var matCube = new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.8 });
+
+                //根据等级调云资源柱颜色
+                var rColor = 0, gColor = 0;
+
+                if (cubeOriginlen < cloudCubeYellowAlarmValue) {
+                    rColor = 0;
+                    gColor = 1;
+                }
+                else if (cubeOriginlen >= cloudCubeYellowAlarmValue && cubeOriginlen < cloudCubeRedAlarmValue) {
+                    rColor = 1;
+                    gColor = 1;
+                }
+                else if (cubeOriginlen >= cloudCubeRedAlarmValue) {
+                    rColor = 1;
+                    gColor = 0;
+                }
+
+                matCube.color.r = rColor;
+                matCube.color.g = gColor;
+                matCube.color.b = 0;
+
+                cloudCubeMesh.material = matCube;
+
+                scene.add(cloudCubeMesh);
+
+                var widthHalf = renderer.domElement.clientWidth / 2;
+                var heightHalf = renderer.domElement.clientHeight / 2;
+
+                var locationPos = lacationObj.position.clone();
+
+                //OLD WAY
+                ////把location的三维世界空间坐标转为二维屏幕坐标
+                //locationPos.project(camera);
+
+                ////0,0左上角的坐标，转为0.0在中心的笛卡尔坐标（x:-1到1，y：-1到1）
+                //locationPos.x = (locationPos.x * widthHalf) + widthHalf;
+                //locationPos.y = -(locationPos.y * heightHalf) + heightHalf;
+
+                //locationPos.x = (locationPos.x / renderer.domElement.clientWidth) * 2 - 1;
+                //locationPos.y = -(locationPos.y / renderer.domElement.clientHeight) * 2 + 1;
+
+                //var raycaster = new THREE.Raycaster();
+                //raycaster.setFromCamera(locationPos, camera);
+
+                //var intersects = raycaster.intersectObject(earthObj);
+
+                //if (intersects.length > 0 && cloudCubeMesh != null) {
+                //    cloudCubeMesh.position.set(0, 0, 0);
+                //    cloudCubeMesh.lookAt(intersects[0].face.normal);
+                //    cloudCubeMesh.rotateX(Math.PI / 2);
+                //    cloudCubeMesh.position.copy(intersects[0].point);
+                //}
+
+                //NEW WAY
+                cloudCubeMesh.position.set(lacationObj.position.x, lacationObj.position.y, lacationObj.position.z);
+                cloudCubeMesh.lookAt(new THREE.Vector3(0, 0, 0));
+                cloudCubeMesh.rotateX(-Math.PI / 2);
+
+                //模拟轴心调到底部效果
+                cloudCubeMesh.geometry.translate(0, 1 / 2, 0);
+                cloudCubeMesh.scale.set(1, cubeOriginlen * cubeScaleFactor, 1);
+            }
+        }
+
+        //清除云资源柱
+        function destoryCloudCube() {
+            for (var i = 0 ; i < cloudCubes.length; i++) {
+                cloudCubes[i].material.dispose();
+                cloudCubes[i].geometry.dispose();
+                scene.remove(cloudCubes[i]);
+            }
+
+            cloudCubes = [];
+        }
+
+
+        var allTweens = new Array();
+        var allTweensObjs = new Array();
+        var securityTweenSpeed = 1000;
+        var securityLevel = 3;
+
+        //根据攻击报警等级缩放圆圈
+        function setSecurityIncidentsLevel(nodeName, level) {    //1:level1, 2：level2, 3：level3
+
+            //destoryCloudCube();
+            //hideAllLinkLine();
+            //showAllSelectorAndNameMesh();
+
+            var obj = scene.getObjectByName("Selector_" + nodeName);
+
+            obj.material = selectorMatAlarm;
+
+            obj.scale.set(0.8, 0.8, 0.8);
+            allTweensObjs.push(obj);
+
+            //放大Tween动画
+            var tweenScale = new TWEEN.Tween(obj.scale)
+                    .to({ x: level / 2 + 1, y: level / 2 + 1, z: level / 2 + 1 }, securityTweenSpeed)
+                    .repeat(Infinity)
+                    //.delay(1000)
+                    //.onUpdate(function () {})
+                    //.easing(TWEEN.Easing.Elastic.Out)
+                    .easing(TWEEN.Easing.Cubic.Out)
+                    .start();
+
+            var tweenColor = new TWEEN.Tween(obj.material.color)
+                    .to({ r: 1, g: 1 - level / securityLevel, b: 0 }, securityTweenSpeed)
+                    .repeat(Infinity)
+                    .easing(TWEEN.Easing.Cubic.Out)
+                    .start();
+
+            allTweens.push(tweenScale);
+            allTweens.push(tweenColor);
+        }
+
+        //停止攻击缩放圆圈
+        function stopAllSecurityIncidents() {
+
+            //destoryCloudCube();
+            //hideAllLinkLine();
+            //showAllSelectorAndNameMesh();
+
+            for (var i = 0; i < allTweens.length; i++) {
+                allTweens[i].stop();
+            }
+
+            for (var i = 0; i < allTweensObjs.length; i++) {
+                allTweensObjs[i].scale.set(1, 1, 1);
+                allTweensObjs[i].material = selectorMatOrigin;
+            }
+        }
+
+        //显示单个城市节点，其它隐藏
+        function showSingleCity(cityEnglishName) {
+
+            showAllCity();
+
+            for (var i = 0; i < cityLocationObjs.length; i++) {
+                if (cityLocationObjs[i].name.split('_')[1] != cityEnglishName) {
+                    cityLocationObjs[i].visible = false;
+                }
+            }
+
+            for (var i = 0; i < citySelectorObjs.length; i++) {
+                if (citySelectorObjs[i].name.split('_')[1] != cityEnglishName) {
+                    citySelectorObjs[i].visible = false;
+                }
+            }
+
+            for (var i = 0; i < cityNameObjs.length; i++) {
+                if (cityNameObjs[i].name.split('_')[1] != cityEnglishName) {
+                    cityNameObjs[i].visible = false;
+                }
+            }
+        }
+
+        //显示所有城市节点
+        function showAllCity(){
+            for (var i = 0; i < cityLocationObjs.length; i++) {
+                cityLocationObjs[i].visible = true;
+            }
+
+            for (var i = 0; i < citySelectorObjs.length; i++) {
+                citySelectorObjs[i].visible = true;
+            }
+
+            for (var i = 0; i < cityNameObjs.length; i++) {
+                cityNameObjs[i].visible = true;
+            }
+
+            rotateToCity("beijing");
+        }
+
+
+        function CreateCityLine(cityName1, cityName2) {
+            var cityPos1 = scene.getObjectByName("Location_" + cityName1).position;
+            var cityPos2 = scene.getObjectByName("Location_" + cityName2).position;
+
+            var circleTwoCityMiddlePos = new THREE.Vector3(cityPos1.x / 2 + cityPos2.x / 2, cityPos1.y / 2 + cityPos2.y / 2, cityPos1.z / 2 + cityPos2.z / 2);
+
+            //创建圆线圈
+
+            //圆圈半径
+            var radianCircle = cityPos1.distanceTo(cityPos2) / 2;
+
+            var lineGeometry = new THREE.Geometry();
+
+            for (var i = 0; i <= circleSegmentCount; i++) {
+                var theta = (i / circleSegmentCount) * Math.PI * 2;
+
+                //if (i >= circleSegmentCount / 2)
+                {
+                    //圆形
+                    //var valueZ = Math.sin(theta) * radianCircle;
+
+                    //跑道环形
+                    if (i == 0 || i == circleSegmentCount / 2 || i == circleSegmentCount) {
+                        var valueZ = Math.sin(theta) * radianCircle;
+                    }
+                    else if (i < circleSegmentCount / 2) {
+                        var valueZ = Math.sin(theta) * radianCircle + circleMiddelLength;
+                    }
+                    else if (i > circleSegmentCount / 2) {
+                        var valueZ = Math.sin(theta) * radianCircle - circleMiddelLength;
+                    }
+
+                    var valueY = 0;
+                    if (valueZ > 0) {
+                        valueY = Math.sin(theta * 2) * radianCircle / circleTurboFactor;
+                    }
+                    else if (valueZ < 0) {
+                        valueY = -Math.sin(theta * 2) * radianCircle / circleTurboFactor;
+                    }
+
+                    lineGeometry.vertices.push(
+                        new THREE.Vector3(
+                            Math.cos(theta) * radianCircle,
+                            valueY,
+                            valueZ
+                            ));
+                }
+            }
+
+            var circleObj = new THREE.Line(lineGeometry, lineMatGreen);
+            circleObj.name = cityName1 + "_" + cityName2;
+            allCircleLines.push(circleObj);
+            allCircleLinesDic[cityName1 + "_" + cityName2] = circleObj;
+            circleObj.position.set(circleTwoCityMiddlePos.x, circleTwoCityMiddlePos.y, circleTwoCityMiddlePos.z);
+            scene.add(circleObj);
+
+            var circleOriginZeroPoint = circleObj.geometry.vertices[0].clone();
+            var circleOriginQuarterPoint = circleObj.geometry.vertices[circleSegmentCount / 4].clone();
+            var circleOriginHalfPoint = circleObj.geometry.vertices[circleSegmentCount / 2].clone();
+
+            circleObj.lookAt(zeroVec3);
+
+            //计算圆圈上0、1/2处的点在世界空间的坐标。
+            var circleZeroPoint1 = circleOriginZeroPoint.clone();
+            var circleHalfPoint1 = circleOriginHalfPoint.clone();
+
+            circleObj.updateMatrixWorld();
+            circleZeroPoint1.applyMatrix4(circleObj.matrixWorld);
+            circleHalfPoint1.applyMatrix4(circleObj.matrixWorld);
+
+            //two city helper (line)
+            //var lineGeometry = new THREE.Geometry();
+            //lineGeometry.vertices.push(cityPos1);
+            //lineGeometry.vertices.push(cityPos2);
+            //var lineTwoCity = new THREE.Line(lineGeometry, lineMatGreen);
+            //scene.add(lineTwoCity);
+
+            ////two city middle position helper (sphere object)
+            //var geoMiddle = new THREE.SphereGeometry(1, 32, 32);
+            //var matMiddle = new THREE.MeshNormalMaterial();
+            //var sphereMiddle = new THREE.Mesh(geoMiddle, matMiddle);
+            //sphereMiddle.position.set(circleTwoCityMiddlePos.x, circleTwoCityMiddlePos.y, circleTwoCityMiddlePos.z);   //把圆圈放到两个城市中间的位置
+            //scene.add(sphereMiddle);
+
+            //circle zero half vertex helper (line)
+            //var lineGeometryZeroHalf = new THREE.Geometry();
+            //lineGeometryZeroHalf.vertices.push(circleZeroPoint1);
+            //lineGeometryZeroHalf.vertices.push(circleHalfPoint1);
+            //var lineZeroHalf = new THREE.Line(lineGeometryZeroHalf, lineMatGreen);
+            //scene.add(lineZeroHalf);
+
+            //圆圈的起点到中间点的向量，起点坐标 减 中间点坐标，向量从起点指向中间点。
+            var vectorCircleZeroToHalf = new THREE.Vector3(circleZeroPoint1.x - circleHalfPoint1.x, circleZeroPoint1.y - circleHalfPoint1.y, circleZeroPoint1.z - circleHalfPoint1.z);
+            //city2到city1的向量，城市2坐标 减 城市1坐标，向量从城市1指向城市2
+            var vectorTwoCity = new THREE.Vector3(cityPos2.x - cityPos1.x, cityPos2.y - cityPos1.y, cityPos2.z - cityPos1.z);
+
+            var lineCityLineCircleThetha = Math.acos(vectorTwoCity.dot(vectorCircleZeroToHalf) / (vectorTwoCity.length() * vectorCircleZeroToHalf.length()));
+
+            //console.log(cityName1 + " and " + cityName2 + ": " + lineCityLineCircleThetha * (180 / Math.PI));
+
+            if (cityPos1.y > cityPos2.y) {
+                circleObj.rotateZ(-lineCityLineCircleThetha);
+            }
+            else if (cityPos1.y < cityPos2.y) {
+                circleObj.rotateZ(lineCityLineCircleThetha);
+            }
+            circleObj.scale.set(1, 1, circleScaleFactor);
+        }
+        
+
+        function render() {
+
+            requestAnimationFrame(render);
+
+            //背光面片需要面向相机（需要放到renderer.render(scene, camera);前面，否则会有闪烁）
+            if (backlightObj != null) {
+                backlightObj.lookAt(camera.position);
+                //backlightObj.quaternion.copy(camera.quaternion); 也可
+            }
+
+            renderer.render(scene, camera);
+
+            //controls.update();
+            TWEEN.update();
+
+            //FallOff渐变球一直朝向相机
+            if (earthFallOff != null) {
+                earthFallOff.material.uniforms.viewVector.value = new THREE.Vector3().subVectors(camera.position, earthFallOff.position);
+            }
+
+            if (cityLinePlaneObjs) {
+                for (var i = 0; i < cityLinePlaneObjs.length; i++) {
+                    cityLinePlaneObjs[i].material.map.offset.x -= 0.01;
+                    cityLinePlaneObjs[i].material.map.offset.x -= 0.01;
+                }
+                
+            }
+        }
+
+        function calCamToCityAngle(destCity) {
+
+            var destCityPosition = new THREE.Vector3(0 - destCity.position.x, 0 - destCity.position.y, 0 - destCity.position.z);
+            var cameraPosition = new THREE.Vector3(0 - camera.position.x, 0 - camera.position.y, 0 - camera.position.z);
+            var angleCamToDst;
+
+            if (destCityPosition.length() != 0 && cameraPosition.length() != 0) {
+                angleCamToDst = Math.acos(destCityPosition.dot(cameraPosition) / (destCityPosition.length() * cameraPosition.length()));
+            }
+            return angleCamToDst;
+        }
+
+        function calCamToCityRotAxis(destCity) {
+            var destCityPosition = new THREE.Vector3(0 - destCity.position.x, 0 - destCity.position.y, 0 - destCity.position.z);
+            var cameraPosition = new THREE.Vector3(0 - camera.position.x, 0 - camera.position.y, 0 - camera.position.z);
+
+            var rotAxis = cameraPosition.cross(destCityPosition);
+            return rotAxis;
+        }
+
+
+        function rotateAroundWorldAxis(object, axis, angle) {
+            var rotationMatrix = new THREE.Matrix4();
+            rotationMatrix.makeRotationAxis(axis.normalize(), angle);
+            var currentPos = new THREE.Vector4(object.position.x, object.position.y, object.position.z, 1);
+            var newPos = currentPos.applyMatrix4(rotationMatrix);
+            object.position.set(newPos.x, newPos.y, newPos.z);
+        }
+
+        //定位到城市
+        function rotateToCity(cityName) {
+
+            var destCity = scene.getObjectByName("Location_" + cityName);
+
+            var rotAxis = calCamToCityRotAxis(destCity);
+            var rotAngleOffset = 0;
+
+            var coords = { rotAngle: 0 };
+            var tweenScale = new TWEEN.Tween(coords)
+                    .to({ rotAngle: calCamToCityAngle(destCity) }, 2000)
+                    .onUpdate(function () {
+
+                        rotateAroundWorldAxis(camera, rotAxis, this.rotAngle - rotAngleOffset);
+                        rotAngleOffset = this.rotAngle;
+
+                        camera.lookAt(zeroVec3);
+                    })
+                    //.easing(TWEEN.Easing.Cubic.Out)
+                    .easing(TWEEN.Easing.Sinusoidal.InOut)
+                    .start();
+        }
+
+        function CreateCityLinePlane(cityStartName, cityEndName) {
+
+            var cityStart = scene.getObjectByName("Location_" + cityStartName);
+            var cityEnd = scene.getObjectByName("Location_" + cityEndName);
+
+            var distanceTwoCity = cityStart.position.distanceTo(cityEnd.position);
+
+            var geom = new THREE.Geometry();
+
+            //自动生成面片的段数。
+            var quadrangleSegmentNumber = Math.floor(distanceTwoCity);
+
+            var segmentLength = distanceTwoCity / Math.floor(distanceTwoCity);
+
+            //面片的宽度
+            var segmentWidth = segmentLength / 2;
+
+            var angleStep = Math.PI / quadrangleSegmentNumber;
+            var segmentSphereRadius = distanceTwoCity / 2;
+
+            ////创建顶点
+            //var v1 = new THREE.Vector3(0, 0, 0);
+            //var v2 = new THREE.Vector3(0, 0, segmentWidth);
+            //var v3 = new THREE.Vector3(segmentSphereRadius - segmentSphereRadius * Math.cos(angleStep), Math.sin(angleStep), 0);
+            //var v4 = new THREE.Vector3(segmentSphereRadius - segmentSphereRadius * Math.cos(angleStep), Math.sin(angleStep), segmentWidth);
+            //var v5 = new THREE.Vector3(segmentSphereRadius - segmentSphereRadius * Math.cos(angleStep * 2), Math.sin(angleStep * 2), 0);
+            //var v6 = new THREE.Vector3(segmentSphereRadius - segmentSphereRadius * Math.cos(angleStep * 2), Math.sin(angleStep * 2), segmentWidth);
+
+            //geom.vertices.push(v1);
+            //geom.vertices.push(v2);
+            //geom.vertices.push(v3);
+            //geom.vertices.push(v4);
+            //geom.vertices.push(v5);
+            //geom.vertices.push(v6);
+
+            ////逆时针顺序
+            //geom.faces.push(new THREE.Face3(0, 3, 2));
+            //geom.faces.push(new THREE.Face3(0, 3, 1));
+            //geom.faces.push(new THREE.Face3(2, 5, 4));
+            //geom.faces.push(new THREE.Face3(2, 5, 3));
+            //geom.faces.push(new THREE.Face3(4, 7, 6));
+            //geom.faces.push(new THREE.Face3(4, 7, 5));
+            //geom.faces.push(new THREE.Face3(6, 9, 8));
+            //geom.faces.push(new THREE.Face3(6, 9, 7));
+
+            //创建顶点
+            var vertexCount = quadrangleSegmentNumber * 2 + 2;
+            for (var i = 0; i < vertexCount; i++) {
+                var vertexPos = new THREE.Vector3(segmentSphereRadius - segmentSphereRadius * Math.cos(angleStep * Math.floor(i / 2)), segmentSphereRadius * Math.sin(angleStep * Math.floor(i / 2)) / 2, (i % 2) * segmentWidth);
+                //console.log(vertexPos.x, vertexPos.y, vertexPos.z);
+                geom.vertices.push(vertexPos);
+            }
+
+            //逆时针顺序绘制三角形
+            for (var i = 0; i < quadrangleSegmentNumber * 2; i++) {
+                geom.faces.push(new THREE.Face3(Math.floor(i / 2) * 2, Math.floor(i / 2) * 2 + 3, (Math.floor(i / 2) + 1) * 2 + ((i % 2 == 0) ? 0 : -1)));
+            }
+
+            var faces = geom.faces;
+
+            for (var i = 0; i < faces.length; i++) {
+                geom.faceVertexUvs[0].push([
+               new THREE.Vector2(0, 1),
+               new THREE.Vector2(1, 0),
+               new THREE.Vector2(1, 1)
+                ])
+            }
+
+            //更新geometry信息。
+            geom.computeBoundingBox();
+            geom.computeFaceNormals();
+            geom.computeVertexNormals();
+            geom.verticesNeedUpdate = true;
+            geom.elementsNeedUpdate = true;
+            //geom.morphTargetsNeedUpdate = true;
+            geom.uvsNeedUpdate = true;
+            geom.normalsNeedUpdate = true;
+            geom.colorsNeedUpdate = true;
+            geom.tangentsNeedUpdate = true;
+
+            var movingLineTexture = new THREE.ImageUtils.loadTexture('models/movingLine.png');
+            movingLineTexture.wrapS = movingLineTexture.wrapT = THREE.RepeatWrapping;
+            //movingLineTexture.repeat.set(2, 2);
+
+            var movingLineMat = new THREE.MeshBasicMaterial({ map: movingLineTexture, transparent: true, opacity: 1, side: THREE.DoubleSide });
+
+            //var wireMaterial = new THREE.MeshBasicMaterial({
+            //    color: 0xffffff,
+            //    wireframe: true
+            //})
+
+            var cityLinePlaneObj = new THREE.Mesh(geom, movingLineMat);
+            cityLinePlaneObjs.push(cityLinePlaneObj);
+            cityLinePlaneObj.name = "cityLine_" + cityStartName + "_To_" + cityEndName;
+
+            scene.add(cityLinePlaneObj);
+
+            //三角形
+            var dataFlow = scene.getObjectByName("DataFlow");
+
+            var dataFlowNew1 = dataFlow.clone();
+            dataFlowNew1.name = "DataFlow_" + cityStartName + "_To_" + cityEndName;
+            dataFlowNew1.translateY(segmentSphereRadius / 2);
+            dataFlowNew1.translateZ(-segmentWidth);
+            dataFlowNew1.scale.set(0.4, 0.4, 0.4);
+            cityLinePlaneObj.add(dataFlowNew1);
+
+            var dataFlowNew2 = dataFlow.clone();
+            dataFlowNew2.name = "DataFlow_" + cityEndName + "_To_" + cityStartName;
+            dataFlowNew2.translateY(segmentSphereRadius / 2);
+            dataFlowNew2.translateZ(segmentWidth);
+            dataFlowNew2.rotateY(Math.PI);
+            dataFlowNew2.scale.set(0.4, 0.4, 0.4);
+            cityLinePlaneObj.add(dataFlowNew2);
+            
+
+            //把轴心调整到面片中部，模拟调整pivot效果
+            cityLinePlaneObj.geometry.translate(-quadrangleSegmentNumber * segmentLength / 2, 0, -segmentWidth / 2);
+
+            //设置cityLinePlaneObj位置和旋转。
+            var cityMiddlePos = new THREE.Vector3((cityStart.position.x + cityEnd.position.x) / 2, (cityStart.position.y + cityEnd.position.y) / 2, (cityStart.position.z + cityEnd.position.z) / 2);
+            cityLinePlaneObj.position.copy(cityMiddlePos);
+            cityLinePlaneObj.lookAt(zeroVec3);
+            cityLinePlaneObj.rotateX(-Math.PI / 2);
+            
+            var vectorTwoCity = new THREE.Vector3(cityEnd.position.x - cityStart.position.x, cityEnd.position.y - cityStart.position.y, cityEnd.position.z - cityStart.position.z);
+
+            var firstVertex = cityLinePlaneObj.geometry.vertices[0].clone();
+            var secondLastVertex = cityLinePlaneObj.geometry.vertices[cityLinePlaneObj.geometry.vertices.length - 2].clone();
+
+            cityLinePlaneObj.updateMatrixWorld();  //更新模型的世界矩阵。
+
+            firstVertex.applyMatrix4(cityLinePlaneObj.matrixWorld);
+            secondLastVertex.applyMatrix4(cityLinePlaneObj.matrixWorld);
+
+            var vectorSecondLastVertexToFirstVertex = new THREE.Vector3(secondLastVertex.x - firstVertex.x, secondLastVertex.y - firstVertex.y, secondLastVertex.z - firstVertex.z);
+            var thetaBetweenCiytsAndLine = Math.acos(vectorSecondLastVertexToFirstVertex.dot(vectorTwoCity) / (vectorSecondLastVertexToFirstVertex.length() * vectorTwoCity.length()));
+
+
+
+            //正是顺时针转、负是逆时针转
+            if (cityEnd.position.y > cityMiddlePos.y) {
+                cityLinePlaneObj.rotateY(-thetaBetweenCiytsAndLine);
+                //console.log("大于: " + cityLinePlaneObj.name + " : " + (-thetaBetweenCiytsAndLine * 57.3));
+            }else{
+                cityLinePlaneObj.rotateY(thetaBetweenCiytsAndLine);
+                //console.log("小于: " + cityLinePlaneObj.name + " : " + thetaBetweenCiytsAndLine * 57.3);
+
+            }
+            
+            cityLinePlaneObj.translateY(0.8);  //往外移一点
+        }
+
+
+        function DestoryALLCityLinePlane() {
+            if (cityLinePlaneObjs) {
+                var obj;
+                for (var i = 0; i < cityLinePlaneObjs.length; i++) {
+                    obj = cityLinePlaneObjs[i];
+                    
+                    scene.remove(obj);
+
+                    obj.geometry.dispose();
+                    obj.material.dispose();
+                } 
+            }
+
+            cityLinePlaneObjs = [];
+        }
+        
+
+        document.onkeydown = function (event) {
+
+            var e = event || window.event || arguments.callee.caller.arguments[0];
+
+            if (e && e.keyCode == 71)    //g
+            {
+                //generateCubeColumn(cloudResourceTestArgs);
+                //setSecurityIncidentsLevel("beijing", 1);
+
+                //showSingleCity("beijing");
+
+                rotateToCity("beijing");
+            }
+
+            if (e && e.keyCode == 68)    //d 
+            {
+                CreateCityLinePlane("beijing", "meishan");
+                CreateCityLinePlane("beijing", "kunshan");
+                CreateCityLinePlane("shenzhen", "beijing");
+                CreateCityLinePlane("beijing", "yantai");
+                CreateCityLinePlane("meishan", "shenzhen");
+                CreateCityLinePlane("meishan", "kunshan");
+                CreateCityLinePlane("beijing", "liaoyuan");
+                CreateCityLinePlane("cs1", "cs2");
+                CreateCityLinePlane("cs1", "shenzhen");
+                CreateCityLinePlane("beijing", "SanFrancisco");
+            }
+           
+
+            if (e && e.keyCode == 72)    //h
+            {
+                //setSecurityIncidentsLevel("kunshan", 1);
+                //showSingleCity("meishan");
+                //showAllCity();
+
+                DestoryALLCityLinePlane();
+            }
+
+            if (e && e.keyCode == 83)    //s
+            {
+                //stopAllSecurityIncidents();
+
+                CreateCityLine("beijing", "kunshan");
+                CreateCityLine("beijing", "yantai");
+                CreateCityLine("beijing", "xinxian");
+                CreateCityLine("xinxian", "kunshan");
+                CreateCityLine("wuhan", "wuxi");
+                CreateCityLine("kunshan", "wuxi");
+                CreateCityLine("shenzhen", "wuxi");
+                CreateCityLine("cs1", "cs2");
+            }
+        }
+
+    </script>
+
+</head>
+
+<body onload="init();">
+    <div id="mapEarth"></div>
+</body>
+</html>
